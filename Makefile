@@ -1,7 +1,9 @@
-BOARD	   	    ?= heltec_wireless_tracker
+# BOARD	   	    ?= heltec_wireless_tracker
+# BOARD	   	    ?= esp32c3_super_mini
+BOARD	   	    ?= wokwi
 
 # Mapeamento BOARD → MCU
-ifeq ($(BOARD), heltec_wireless_tracker)
+ifneq ($(filter $(BOARD),heltec_wireless_tracker wokwi),)
   MCU             := esp32s3
   FLASH_SIZE      := 8mb
   PARTITION_TABLE := partitions/large_spiffs_8MB.csv

@@ -20,6 +20,13 @@
             "top": 150,
             "left": -64,
             "rotate": 90
+        },
+        {
+            "type": "chip-gps-neo6m",
+            "id": "gps",
+            "top": 40,
+            "left": 180,
+            "attrs": {}
         }
     ],
     "connections": [
@@ -30,13 +37,20 @@
         [ "tft:DC",  "esp:40",   "purple", [] ],
         [ "tft:RST",  "esp:39",   "blue",   [] ],
         [ "tft:CS",   "esp:38",   "orange", [] ],
-        [ "tft:LED",  "esp:21",   "white",  [] ]
+        [ "tft:LED",  "esp:21",   "white",  [] ],
+
+
+        ["gps:GND", "esp:GND.2", "black", ["h0"]],
+        ["gps:VCC", "esp:3V3.2", "red", ["h0"]],
+        ["gps:TX", "esp:16", "blue", ["h0"]],
+        ["gps:RX", "esp:17", "green", ["v0"]]
     ],
     "serialMonitor": {
         "display": "terminal",
         "convertEol": true
     },
     "dependencies": {
-    	"chip-st7735": "github:martysweet/st7735-wokwi-chip@1.0.4"
+    	"chip-st7735": "github:martysweet/st7735-wokwi-chip@1.0.4",
+        "chip-gps-neo6m": "github:erickweil/gps-neo-6m-wokwi-for-vscode@1.0.0"
     }
 }

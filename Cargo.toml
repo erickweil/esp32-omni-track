@@ -27,9 +27,11 @@ esp32s3 = ["espidf"]
 esp32c3_super_mini = ["esp32c3"]
 # Heltec Wireless Tracker (ESP32-S3FN8, Xtensa, target: xtensa-esp32s3-espidf)
 heltec_wireless_tracker = ["esp32s3"]
+# Wokwi (board-esp32-s3-devkitc-1, target: xtensa-esp32s3-espidf)
+wokwi = ["esp32s3"]
 
 # genérico para desenvolvimento local (para rust-analyzer funcionar)
-default = ["espidf"]
+default = ["wokwi"]
 
 [dependencies]
 log = "0.4"
