@@ -1,5 +1,11 @@
 [wokwi]
 version = 1
 gdbServerPort = 3333
-elf = "target/xtensa-esp32s3-espidf/debug/esp32-omni-track"
-firmware = "target/xtensa-esp32s3-espidf/debug/esp32-omni-track"
+firmware="target/flasher_args.json"
+# elf = "target/xtensa-esp32s3-espidf/debug/esp32-omni-track"
+# firmware = "target/xtensa-esp32s3-espidf/debug/esp32-omni-track"
+
+# Forward http://localhost:8080 to port 80 on the simulated ESP32:
+# [[net.forward]]
+# from = "localhost:8080"
+# to = "target:80"
