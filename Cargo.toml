@@ -41,6 +41,7 @@ embassy-time = { version = "0.5", features = ["generic-queue-8"] , optional = tr
 embedded-graphics = "0.8.2"
 mipidsi = "0.10.0"
 nmea = { version = "0.7.0", default-features = false, features = ["std", "GNSS"] }
+chrono = { version = "0.4.44", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 test-log = { version = "*" }

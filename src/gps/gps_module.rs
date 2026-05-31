@@ -1,0 +1,141 @@
+use std::io::Read;
+use chrono::NaiveDateTime;
+use nmea::{Nmea, sentences::FixType};
+use esp32_omni_track::Result;
+
+use crate::gps::LineByLineIterator;
+
+/*/// Deve caber em 16 bytes
+#[repr(C)]
+pub struct GPSPosition {
+    pub timestamp: u32, // Unix timestamp, seconds since 1970-01-01 UTC
+    pub lat: i32, // Latitude x 1e7 (ex: 30.1234567° -> 301234567)
+    pub lon: i32, // Longitude x 1e7
+
+    pub speed: u8, // Velocidade em km/h (0-255)
+    pub course: u8, // 0-360 -> 0-255
+    pub hdop: u8, // HDOP x 10 (ex: 0.9 -> 9, 1.2 -> 12)
+    pub num_satellites: u8, // Número de satélites usados no fix
+}*/ 
+
+pub struct GPSPosition {
+    pub timestamp: Option<NaiveDateTime>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub speed: Option<f32>,
+    pub course: Option<f32>,
+    pub hdop: Option<f32>,
+    pub num_satellites: Option<u32>,
+}
+
+pub struct GPSModule {
+    nmea_parser: Box<Nmea>,
+    line_iterator: LineByLineIterator
+}
+
+impl GPSModule {
+    pub fn new() -> Self {
+        Self {
+            // Criar na HEAP, isso consome memória demais!
+            // https://github.com/AeroRust/nmea/issues/2
+            // TODO: pesquisar outra biblioteca mais leve? o TinyGPS++ fazia como? 
+            nmea_parser: Box::default(),
+            line_iterator: LineByLineIterator::new(),
+        }
+    }
+
+    pub fn read_from_uart(&mut self, gps_uart: &mut impl Read) -> Result<bool> {
+        let mut changed = false;
+        loop {
+            let bytes_read = self.line_iterator.fill_from(gps_uart)?;
+            
+            self.line_iterator.drain_lines(|line| {
+                log::info!("GPS '{}'", line);
+
+                // Tenta parsear a linha como uma sentença NMEA
+                if self.nmea_parser.parse(line).is_ok() {
+                    changed = true;
+                }
+            });
+
+            if bytes_read == 0 {
+                break; // Sem mais dados disponíveis no momento
+            }
+        }
+
+        Ok(changed)
+    }
+
+    pub fn get_last_fix(&self) -> Option<GPSPosition> {
+        match self.nmea_parser.fix_type() {
+            None | Some(FixType::Invalid) => None,
+            _ => Some(GPSPosition {
+                timestamp: if let Some(date) = self.nmea_parser.fix_date && let Some(time) = self.nmea_parser.fix_time {
+                    Some(NaiveDateTime::new(date, time))
+                } else {
+                    None
+                },
+                latitude: self.nmea_parser.latitude(),
+                longitude: self.nmea_parser.longitude(),
+                speed: self.nmea_parser.speed_over_ground,
+                course: self.nmea_parser.true_course,
+                hdop: self.nmea_parser.hdop,
+                num_satellites: self.nmea_parser.fix_satellites(),
+            })
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use nmea::sentences::FixType;
+    use super::*;
+
+    // https://swairlearn.bluecover.pt/nmea_analyser
+    const GPS_STREAM: &str = "$GPRMC,045103.000,A,3014.1984,N,09749.2872,W,0.67,161.46,030913,,,A*7C\r\n\
+$GPGGA,045104.000,3014.1985,N,09749.2873,W,1,09,1.2,211.6,M,-22.5,M,,0000*62\r\n\
+$GPRMC,045200.000,A,3014.3820,N,09748.9514,W,36.88,65.02,030913,,,A*77\r\n\
+$GPGGA,045201.000,3014.3864,N,09748.9411,W,1,10,1.2,200.8,M,-22.5,M,,0000*6C\r\n\
+$GPRMC,045251.000,A,3014.4275,N,09749.0626,W,0.51,217.94,030913,,,A*7D\r\n\
+$GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n";
+
+    #[test_log::test]
+    fn test_gps_module() {
+        let mut gps_module = GPSModule::new();
+        let mut reader = std::io::Cursor::new(GPS_STREAM.as_bytes().to_vec());
+        loop {
+            let changed = gps_module.read_from_uart(&mut reader)
+                .expect("Failed to read from GPS module");
+
+            if changed {
+                gps_module.get_last_fix().expect("Expected a valid GPS fix");
+            } else {
+                break;
+            }
+        }
+        assert_eq!(reader.position(), GPS_STREAM.len() as u64);
+
+        assert_eq!(gps_module.nmea_parser.fix_type(), Some(FixType::Gps));
+        let fix = gps_module.get_last_fix().expect("Expected a valid GPS fix");
+        assert!(fix.latitude.is_some());
+        assert!(fix.longitude.is_some());
+    }
+
+    #[test_log::test]
+    fn test_line_overflow() {
+        let mut line_iterator = LineByLineIterator::new();
+        let max_buffer = line_iterator.bytes_available();
+        let long_line = "A".repeat(max_buffer + 10) + "\n";
+
+        let mut reader = std::io::Cursor::new(long_line.as_bytes().to_vec());
+        let result = line_iterator.fill_from(&mut reader);
+
+        assert_eq!(result.unwrap(), max_buffer);
+
+        let mut reader = std::io::Cursor::new(b"B".to_vec());
+        let result = line_iterator.fill_from(&mut reader);
+        assert_eq!(result.unwrap(), 1);
+        assert_eq!(line_iterator.bytes_available(), max_buffer - 1); // O buffer foi resetado e agora tem apenas 1 byte
+    }
+}
