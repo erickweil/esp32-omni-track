@@ -1,5 +1,6 @@
 #![allow(unused_imports)]
 use std::{thread, time::Duration};
+use mipidsi::{Builder, interface::SpiInterface, models::ST7735s, options::{ColorInversion, ColorOrder, Orientation, Rotation}};
 use nmea::Nmea;
 
 pub use esp32_omni_track::prelude::*;
@@ -14,7 +15,13 @@ espidf_only! {
     use esp_idf_svc::sys as sys;
     use esp_idf_svc::io as embedded_io;
     use esp_idf_svc::{hal::delay};
-    use esp_idf_svc::hal::{gpio::{AnyIOPin, PinDriver}, peripherals::Peripherals, uart::{UartConfig, UartDriver}, units::Hertz};
+    use esp_idf_svc::hal::{
+        gpio::{AnyIOPin, AnyInputPin, PinDriver},
+        peripherals::Peripherals,
+        spi::{self},
+        uart::{UartConfig, UartDriver}, 
+        units::{Hertz, MegaHertz},
+    };
 
     /// Wrapper sobre UartDriver para implementar a trait `std::io::Read` de forma não bloqueante, permitindo ler os dados do GPS sem travar o loop principal.
     pub struct NonBlockingUart<'d>(pub UartDriver<'d>);
@@ -40,6 +47,16 @@ espidf_only! {
 
         let peripherals = Peripherals::take()?;
 
+        // Configuração de Pinos do display para o Heltec Wireless Tracker
+        let spi = peripherals.spi2;
+        let rst = PinDriver::output(peripherals.pins.gpio39)?;
+        let dc = PinDriver::output(peripherals.pins.gpio40)?;
+        let mut backlight = PinDriver::output(peripherals.pins.gpio21)?;
+        let sclk = peripherals.pins.gpio41;
+        let sda = peripherals.pins.gpio42;
+        let sdi = None::<AnyInputPin>;
+        let cs = Some(peripherals.pins.gpio38);
+
         #[cfg(feature = "heltec_wireless_tracker")]
         let mut vext = PinDriver::output(peripherals.pins.gpio3)?; // Vext Ctrl: HIGH para energizar display e GNSS onboard
 
@@ -50,6 +67,10 @@ espidf_only! {
             thread::sleep(Duration::from_millis(500));
             log::info!("Vext habilitado para alimentar o display e módulo GNSS onboard");
         }
+
+        // Liga o backlight
+        backlight.set_high()?;
+        thread::sleep(Duration::from_millis(50));
 
         // Default read from Serial port (UART0) for ESP32
         #[cfg(feature = "wokwi")]
@@ -78,14 +99,50 @@ espidf_only! {
         let mut gps_uart = NonBlockingUart(gps_uart);
         let mut gps_module = GPSModule::new();
 
+        // Inicializando Display ST7735s
+        let spi_device = spi::SpiDeviceDriver::new_single(
+            spi,
+            sclk,
+            sda,
+            sdi,
+            cs,
+            &spi::SpiDriverConfig::new(),
+            &spi::SpiConfig::new()
+                .baudrate(MegaHertz(26).into()),
+                //.data_mode(MODE_3), // note that in order for the ST7789 to work, the data_mode needs to be set to MODE_3
+        )?;
+
+        // display interface abstraction from SPI and DC
+        let mut buffer = [0u8; 512];
+        let di = SpiInterface::new(
+            spi_device, 
+            dc, 
+            &mut buffer
+        );
+
+        // crate driver
+        let mut display = Builder::new(ST7735s, di)
+            // Heltec Wireless Tracker
+            .display_size(80, 160)
+            .display_offset(26, 1)
+            .color_order(ColorOrder::Bgr)
+            .invert_colors(ColorInversion::Inverted)
+            .orientation(Orientation::new().rotate(Rotation::Deg270))
+            .reset_pin(rst)
+            .init(&mut delay::Ets)
+            .map_err(|e| format!("Erro ao inicializar display: {e:?}"))?;
+
+        let mut display_module = DisplayModule::new();
+
         // Lê linha por linha do GPS
         log::info!("INICIALIZADO!");
+        let mut changed_before = false;
         loop {
             let changed = gps_module.read_from_uart(&mut gps_uart)?;
 
-            if changed {
+            if changed_before && !changed {
                 let fix = gps_module.get_last_fix();
-                if let Some(fix) = fix {
+                if let Some(fix) = fix.as_ref() {
                     log::info!("TIMESTAMP: {:?}", fix.timestamp);
                     log::info!("LATITUDE: {:?}", fix.latitude);
                     log::info!("LONGITUDE: {:?}", fix.longitude);
@@ -96,7 +153,10 @@ espidf_only! {
                 } else {
                     log::info!("Sem fix GPS válido");
                 }
+
+                display_module.draw_position(&mut display, fix.as_ref())?;
             }
+            changed_before = changed;
 
             // Devolve o controle para o FreeRTOS
             thread::sleep(Duration::from_millis(10));

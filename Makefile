@@ -1,6 +1,6 @@
-# BOARD	   	    ?= heltec_wireless_tracker
+BOARD	   	    ?= heltec_wireless_tracker
 # BOARD	   	    ?= esp32c3_super_mini
-BOARD	   	    ?= wokwi
+# BOARD	   	    ?= wokwi
 
 # Mapeamento BOARD → MCU
 ifneq ($(filter $(BOARD),heltec_wireless_tracker wokwi),)
@@ -35,12 +35,12 @@ build-rust:
 ifeq ($(TARGET), xtensa-esp32s3-espidf)
 	. ${HOME}/export-esp.sh && \
 	export MCU=$(MCU) && \
-	cargo +esp build --target $(TARGET) --features "$(BOARD)" --release
+	cargo +esp build --target $(TARGET) --no-default-features --features "$(BOARD)" --release
 else ifeq ($(TARGET), riscv32imc-esp-espidf)
 # Placas RISC-V (ex: ESP32-C3) pode ser rust normal
 # Precisa ter instalado a toolchain com rust-src e o target "rustup target add riscv32imc-unknown-none-elf" para ESP32-C3
 	export MCU=$(MCU) && \
-	cargo +nightly build --target ${TARGET} --features "$(BOARD)" --release
+	cargo +nightly build --target ${TARGET} --no-default-features --features "$(BOARD)" --release
 else
 	$(error "Unknown TARGET: $(TARGET)")
 endif

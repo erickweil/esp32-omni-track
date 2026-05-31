@@ -7,7 +7,7 @@ For now the only boards that will be supported are:
 - `esp32c3_super_mini` Esp32C3 Super Mini (esp32c3 RISC-V) + any UART GPS Module
 
 ## Roadmap
-- [...] Coletar informações de posição do módulo GPS via UART + exibição display ST7735
+- [x] Coletar informações de posição do módulo GPS via UART + exibição display ST7735
 - [ ] Modo stand alone, Wifi AP + Servidor web local
 - [ ] Sistema de arquivos LittleFS para armazenar posições em fila
 - [ ] Registro de posições por tempo e ângulo
@@ -24,7 +24,6 @@ For now the only boards that will be supported are:
 1. Multithreading (std threads são tasks do RTOS? problema da stack size)
 2. Async (Embassy é compatível com esp-idf + std?)
 3. Single thread + state machine (evitar operações bloqueantes quando possível, no projeto antigo era assim)
-- [ ] obter course direction a partir do GPS, engenharia reversa de como o TinyGPS++ fazia
 
 ## See also
 - https://github.com/erickweil/arduino-projetos (Initial tracker system in c++ with PlatformIO and Rust code experiments for esp32)
