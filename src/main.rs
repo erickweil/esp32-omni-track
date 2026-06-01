@@ -44,40 +44,53 @@ espidf_only! {
 
         // Bind the log crate to the ESP Logging facilities
         esp_idf_svc::log::EspLogger::initialize_default();
+        log::info!("Configurando periféricos...");
 
         let peripherals = Peripherals::take()?;
 
         // Configuração de Pinos do display para o Heltec Wireless Tracker
+        #[cfg(feature = "esp32c6_devkitc_1")]
         let spi = peripherals.spi2;
+        #[cfg(feature = "esp32c6_devkitc_1")]
+        let rst = PinDriver::output(peripherals.pins.gpio5)?;
+        #[cfg(feature = "esp32c6_devkitc_1")]
+        let dc = PinDriver::output(peripherals.pins.gpio4)?;
+        #[cfg(feature = "esp32c6_devkitc_1")]
+        let mut backlight = PinDriver::output(peripherals.pins.gpio24)?;
+        #[cfg(feature = "esp32c6_devkitc_1")]
+        let sclk = peripherals.pins.gpio6;
+        #[cfg(feature = "esp32c6_devkitc_1")]
+        let sda = peripherals.pins.gpio7;
+        #[cfg(feature = "esp32c6_devkitc_1")]
+        let cs = Some(peripherals.pins.gpio18);
+
+        #[cfg(feature = "heltec_wireless_tracker")]
+        let spi = peripherals.spi2;
+        #[cfg(feature = "heltec_wireless_tracker")]
         let rst = PinDriver::output(peripherals.pins.gpio39)?;
+        #[cfg(feature = "heltec_wireless_tracker")]
         let dc = PinDriver::output(peripherals.pins.gpio40)?;
+        #[cfg(feature = "heltec_wireless_tracker")]
         let mut backlight = PinDriver::output(peripherals.pins.gpio21)?;
+        #[cfg(feature = "heltec_wireless_tracker")]
         let sclk = peripherals.pins.gpio41;
+        #[cfg(feature = "heltec_wireless_tracker")]
         let sda = peripherals.pins.gpio42;
-        let sdi = None::<AnyInputPin>;
+        #[cfg(feature = "heltec_wireless_tracker")]
         let cs = Some(peripherals.pins.gpio38);
+
+        let sdi = None::<AnyInputPin>;
 
         #[cfg(feature = "heltec_wireless_tracker")]
         let mut vext = PinDriver::output(peripherals.pins.gpio3)?; // Vext Ctrl: HIGH para energizar display e GNSS onboard
 
-        #[cfg(feature = "heltec_wireless_tracker")]
-        {                
-            // Habilita Vext para alimentar o display e módulo GNSS onboard
-            vext.set_high()?;
-            thread::sleep(Duration::from_millis(500));
-            log::info!("Vext habilitado para alimentar o display e módulo GNSS onboard");
-        }
-
-        // Liga o backlight
-        backlight.set_high()?;
-        thread::sleep(Duration::from_millis(50));
-
+        log::info!("GPS UART...");
         // Default read from Serial port (UART0) for ESP32
-        #[cfg(feature = "wokwi")]
+        #[cfg(feature = "esp32c6_devkitc_1")]
         let gps_uart = UartDriver::new(
             peripherals.uart1,
-            peripherals.pins.gpio17, // UART0 TX
-            peripherals.pins.gpio16, // UART0 RX
+            peripherals.pins.gpio11, // UART0 TX
+            peripherals.pins.gpio10, // UART0 RX
             Option::<AnyIOPin>::None,
             Option::<AnyIOPin>::None,
             &UartConfig::new()
@@ -97,8 +110,8 @@ espidf_only! {
         )?;
 
         let mut gps_uart = NonBlockingUart(gps_uart);
-        let mut gps_module = GPSModule::new();
 
+        log::info!("ST7735 SPI...");
         // Inicializando Display ST7735s
         let spi_device = spi::SpiDeviceDriver::new_single(
             spi,
@@ -113,11 +126,12 @@ espidf_only! {
         )?;
 
         // display interface abstraction from SPI and DC
-        let mut buffer = [0u8; 512];
+        // Buffer na heap para não pressionar a stack da task principal
+        let mut buffer = Box::new([0u8; 512]);
         let di = SpiInterface::new(
             spi_device, 
             dc, 
-            &mut buffer
+            buffer.as_mut()
         );
 
         // crate driver
@@ -132,12 +146,31 @@ espidf_only! {
             .init(&mut delay::Ets)
             .map_err(|e| format!("Erro ao inicializar display: {e:?}"))?;
 
-        let mut display_module = DisplayModule::new();
+        log::info!("Ativando...");
 
-        // Lê linha por linha do GPS
+        #[cfg(feature = "heltec_wireless_tracker")]
+        {                
+            // Habilita Vext para alimentar o display e módulo GNSS onboard
+            vext.set_high()?;
+            //thread::sleep(Duration::from_millis(500));
+            log::info!("Vext habilitado para alimentar o display e módulo GNSS onboard");
+        }
+
+        // Liga o backlight
+        backlight.set_high()?;
+        //thread::sleep(Duration::from_millis(50));
+
+        let mut display_module = DisplayModule::new();
+        let mut gps_module = GPSModule::new();
+
         log::info!("INICIALIZADO!");
+        // uxTaskGetStackHighWaterMark retorna palavras (4 bytes), então multiplica por 4 para bytes.
+        let high_water_words = unsafe { sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut()) };
+        log::info!("Stack mínima livre: {} bytes ({} words)", high_water_words * 4, high_water_words);
+
         let mut changed_before = false;
         loop {
+
             let changed = gps_module.read_from_uart(&mut gps_uart)?;
 
             if changed_before && !changed {

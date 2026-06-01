@@ -21,17 +21,18 @@ opt-level = "z"
 espidf = ["dep:esp-idf-svc", "dep:embassy-time"]
 
 esp32c3 = ["espidf"]
+esp32c6 = ["espidf"]
 esp32s3 = ["espidf"]
 
 # Esp32-C3 SuperMini (RISC-V, target: riscv32imc-esp-espidf)
 esp32c3_super_mini = ["esp32c3"]
 # Heltec Wireless Tracker (ESP32-S3FN8, Xtensa, target: xtensa-esp32s3-espidf)
 heltec_wireless_tracker = ["esp32s3"]
-# Wokwi (board-esp32-s3-devkitc-1, target: xtensa-esp32s3-espidf)
-wokwi = ["esp32s3"]
+# Esp32-C6-DevKitC-1 (RISC-V, target: riscv32imc-esp-espidf)
+esp32c6_devkitc_1 = ["esp32c6"]
 
 # genérico para desenvolvimento local (para rust-analyzer funcionar)
-default = ["wokwi"]
+default = ["esp32c6_devkitc_1"]
 
 [dependencies]
 log = "0.4"

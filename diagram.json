@@ -3,7 +3,7 @@
     "editor": "wokwi",
     "parts": [
         {
-            "type": "board-esp32-s3-devkitc-1",
+            "type": "board-esp32-c6-devkitc-1",
             "id": "esp",
             "top": 0,
             "left": 0,
@@ -30,20 +30,20 @@
         }
     ],
     "connections": [
-        [ "tft:VCC",  "esp:3V3.1",  "red",    [] ],
-        [ "tft:GND",  "esp:GND.3","black",  [] ],
-        [ "tft:MOSI", "esp:42",   "green",  [] ],
-        [ "tft:SCK",  "esp:41",   "yellow", [] ],
-        [ "tft:DC",  "esp:40",   "purple", [] ],
-        [ "tft:RST",  "esp:39",   "blue",   [] ],
-        [ "tft:CS",   "esp:38",   "orange", [] ],
-        [ "tft:LED",  "esp:21",   "white",  [] ],
+        [ "tft:VCC",  "esp:3V3",  "red",    [] ],
+        [ "tft:GND",  "esp:GND.2","black",  [] ],
+        [ "tft:MOSI", "esp:7",   "green",  [] ],
+        [ "tft:SCK",  "esp:6",   "yellow", [] ],
+        [ "tft:DC",  "esp:4",   "purple", [] ],
+        [ "tft:RST",  "esp:5",   "blue",   [] ],
+        [ "tft:CS",   "esp:18",   "orange", [] ],
+        [ "tft:LED",  "esp:24",   "white",  [] ],
 
 
-        ["gps:GND", "esp:GND.2", "black", ["h0"]],
-        ["gps:VCC", "esp:3V3.2", "red", ["h0"]],
-        ["gps:TX", "esp:16", "blue", ["h0"]],
-        ["gps:RX", "esp:17", "green", ["v0"]]
+        ["gps:VCC", "esp:3V3", "red", ["h0"]],
+        ["gps:GND", "esp:GND.1", "black", ["h0"]],
+        ["gps:TX", "esp:10", "blue", ["h0"]],
+        ["gps:RX", "esp:11", "green", ["v0"]]
     ],
     "serialMonitor": {
         "display": "terminal",
