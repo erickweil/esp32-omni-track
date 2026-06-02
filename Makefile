@@ -1,6 +1,6 @@
-# BOARD	   	    ?= heltec_wireless_tracker
+BOARD	   	    ?= heltec_wireless_tracker
 # BOARD	   	    ?= esp32c3_super_mini
-BOARD	   	    ?= esp32c6_devkitc_1
+# BOARD	   	    ?= esp32c6_devkitc_1
 
 # Mapeamento BOARD → MCU
 ifneq ($(filter $(BOARD),heltec_wireless_tracker),)

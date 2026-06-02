@@ -1,35 +1,125 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OMNI TRACK</title>
-    <style>
-        body { text-align: center; }
-        button { padding: 10px 20px; color: #fff; background-color: #007BFF; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OMNI TRACK</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #0d0d0d; color: #c8c8c8; padding: 1.5rem; }
+    
+    header { display: flex; align-items: center; gap: 10px; padding-bottom: 1rem; border-bottom: 1px solid #1e1e1e; margin-bottom: 1.5rem; }
+    h1 { font-family: monospace; font-size: 15px; font-weight: 400; letter-spacing: 5px; color: #fff; }
+    
+    #status-dot { width: 7px; height: 7px; border-radius: 50%; background: #1D9E75; animation: blink 2s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+    
+    #status-label { margin-left: auto; font-family: monospace; font-size: 10px; letter-spacing: 3px; color: #1D9E75; }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: #1e1e1e; border: 1px solid #1e1e1e; }
+    .field { background: #0d0d0d; padding: 14px 16px; }
+    .field-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #444; margin-bottom: 6px; }
+    .field-value { font-family: monospace; font-size: 15px; color: #e0e0e0; }
+    .highlight { color: #1D9E75; }
+
+    /* Estilos do novo botão do Maps */
+    #maps-btn {
+      display: block; width: 100%; margin-top: 15px; padding: 12px;
+      background: #1D9E75; color: #0d0d0d; border: none; border-radius: 2px;
+      font-family: monospace; font-size: 12px; font-weight: bold; letter-spacing: 2px;
+      cursor: pointer; text-transform: uppercase; transition: background 0.3s;
+    }
+    #maps-btn:hover:not(:disabled) { background: #157959; }
+    #maps-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+    .footer-info { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+    #timestamp { font-family: monospace; font-size: 10px; color: #333; }
+    #error-message { font-family: monospace; font-size: 11px; color: #c0392b; display: none; }
+  </style>
 </head>
 <body>
+
+  <header>
+    <div id="status-dot"></div>
     <h1>OMNI TRACK</h1>
-    <pre id="gps-real-time"></pre>
-    <script>
-        const gpsElement = document.getElementById('gps-real-time');
-        // Tem que fazer um GET em /position para obter a última posição GPS registrada
-        async function fetchGPSData() {
-            try {
-                const data = await fetch('/position', { method: 'GET' })
-                    .then(res => res.json())
-                    .catch(err => { throw new Error('Erro ao obter dados GPS: ' + err.message); });
+    <span id="status-label">AGUARDANDO</span>
+  </header>
 
-                gpsElement.innerText = `Latitude: ${data.latitude}\nLongitude: ${data.longitude}\nSpeed: ${data.speed}\nCourse: ${data.course}\nHDOP: ${data.hdop}\nSatélites: ${data.num_satellites}\nTimestamp: ${data.timestamp}`;
-            } catch (error) {
-                console.error(error);
-                gpsElement.innerText = 'Erro ao obter dados GPS: '+error.message;
-            }
-        }
+  <div class="grid">
+    <div class="field"><div class="field-label">Latitude</div><div class="field-value highlight" id="lat">—</div></div>
+    <div class="field"><div class="field-label">Longitude</div><div class="field-value highlight" id="lng">—</div></div>
+    <div class="field"><div class="field-label">Velocidade</div><div class="field-value" id="spd">—</div></div>
+    <div class="field"><div class="field-label">Curso</div><div class="field-value" id="crs">—</div></div>
+    <div class="field"><div class="field-label">HDOP</div><div class="field-value" id="hdp">—</div></div>
+    <div class="field"><div class="field-label">Satélites</div><div class="field-value" id="sat">—</div></div>
+  </div>
 
-        setInterval(() => { fetchGPSData(); }, 5000);
-        fetchGPSData();
-    </script>
+  <button id="maps-btn" disabled onclick="openMaps()">Ver no Google Maps</button>
+
+  <div class="footer-info">
+    <div id="error-message"></div>
+    <div id="timestamp">—</div>
+  </div>
+
+  <script>
+    let currentLat = null;
+    let currentLng = null;
+
+    const updateField = (id, value) => document.getElementById(id).textContent = value;
+    const statusLabel = document.getElementById('status-label');
+    const statusDot   = document.getElementById('status-dot');
+    const errorMsg    = document.getElementById('error-message');
+    const mapsBtn     = document.getElementById('maps-btn');
+
+    function setStatus(active, error = '') {
+      const color = active ? '#1D9E75' : '#c0392b';
+      statusLabel.textContent = active ? 'ATIVO' : 'OFFLINE';
+      statusLabel.style.color = color;
+      statusDot.style.background = color;
+      
+      if (error) {
+        errorMsg.textContent = 'Erro: ' + error;
+        errorMsg.style.display = 'block';
+      } else {
+        errorMsg.style.display = 'none';
+      }
+    }
+
+    async function fetchPosition() {
+      try {
+        const response = await fetch('/position');
+        const data = await response.json();
+
+        currentLat = data.latitude;
+        currentLng = data.longitude;
+
+        updateField('lat', currentLat);
+        updateField('lng', currentLng);
+        updateField('spd', data.speed + ' km/h');
+        updateField('crs', data.course + '°');
+        updateField('hdp', data.hdop);
+        updateField('sat', data.num_satellites);
+        updateField('timestamp', data.timestamp);
+
+        // Ativa o botão do Maps se tivermos coordenadas válidas
+        mapsBtn.disabled = !currentLat || !currentLng;
+        
+        setStatus(true);
+      } catch (error) {
+        setStatus(false, error.message);
+      }
+    }
+
+    function openMaps() {
+      if (currentLat && currentLng) {
+        const url = `https://www.google.com/maps?q=${currentLat},${currentLng}`;
+        window.open(url, '_blank'); // Abre em uma nova aba
+      }
+    }
+
+    setInterval(fetchPosition, 5000);
+    fetchPosition();
+  </script>
+
 </body>
 </html>

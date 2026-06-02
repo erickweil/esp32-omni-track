@@ -82,7 +82,9 @@ where U: Read
                 },
                 latitude: self.nmea_parser.latitude(),
                 longitude: self.nmea_parser.longitude(),
-                speed: self.nmea_parser.speed_over_ground,
+                // Speed over ground, knots
+                // The knot is a unit of speed equal to one nautical mile per hour, exactly 1.852 km/h
+                speed: self.nmea_parser.speed_over_ground.map(|knots| knots * 1.852),
                 course: self.nmea_parser.true_course,
                 hdop: self.nmea_parser.hdop,
                 num_satellites: self.nmea_parser.fix_satellites(),

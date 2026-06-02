@@ -11,7 +11,10 @@ const PASSWORD: &str = match option_env!("WIFI_PASS") {
 };
 
 // true para Access Point, false para Client
-const WIFI_AP_MODE: bool = false;
+const WIFI_AP_MODE: bool = match option_env!("WIFI_AP") {
+    Some(val) => val.eq_ignore_ascii_case("true"),
+    None => false,
+};
 const CHANNEL: u8 = 2;
 /// O intervalo permitido é de [8, 84], o que corresponde a uma potência real de 2 dBm a 20 dBm.
 /// A unidade do parâmetro de potência (power) é de 0.25 dBm.
