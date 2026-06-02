@@ -18,6 +18,7 @@ pub struct GPSPosition {
     pub num_satellites: u8, // Número de satélites usados no fix
 }*/ 
 
+#[derive(Clone)]
 pub struct GPSPosition {
     pub timestamp: Option<NaiveDateTime>,
     pub latitude: Option<f64>,
@@ -28,26 +29,30 @@ pub struct GPSPosition {
     pub num_satellites: Option<u32>,
 }
 
-pub struct GPSModule {
+pub struct GPSModule<U> {
+    uart: U,
     nmea_parser: Box<Nmea>,
     line_iterator: LineByLineIterator
 }
 
-impl GPSModule {
-    pub fn new() -> Self {
+impl<U> GPSModule<U> 
+where U: Read
+{
+    pub fn new(uart: U) -> Self {
         Self {
             // Criar na HEAP, isso consome memória demais!
             // https://github.com/AeroRust/nmea/issues/2
             // TODO: pesquisar outra biblioteca mais leve? o TinyGPS++ fazia como? 
+            uart,
             nmea_parser: Box::default(),
             line_iterator: LineByLineIterator::new(),
         }
     }
 
-    pub fn read_from_uart(&mut self, gps_uart: &mut impl Read) -> Result<bool> {
+    pub fn read_from_uart(&mut self) -> Result<bool> {
         let mut changed = false;
         loop {
-            let bytes_read = self.line_iterator.fill_from(gps_uart)?;
+            let bytes_read = self.line_iterator.fill_from(&mut self.uart)?;
             
             self.line_iterator.drain_lines(|line| {
                 log::info!("GPS '{}'", line);
@@ -102,10 +107,10 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
 
     #[test_log::test]
     fn test_gps_module() {
-        let mut gps_module = GPSModule::new();
-        let mut reader = std::io::Cursor::new(GPS_STREAM.as_bytes().to_vec());
+        let reader = std::io::Cursor::new(GPS_STREAM.as_bytes().to_vec());
+        let mut gps_module = GPSModule::new(reader);
         loop {
-            let changed = gps_module.read_from_uart(&mut reader)
+            let changed = gps_module.read_from_uart()
                 .expect("Failed to read from GPS module");
 
             if changed {
@@ -114,56 +119,11 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
                 break;
             }
         }
-        assert_eq!(reader.position(), GPS_STREAM.len() as u64);
+        assert_eq!(gps_module.uart.position(), GPS_STREAM.len() as u64);
 
         assert_eq!(gps_module.nmea_parser.fix_type(), Some(FixType::Gps));
         let fix = gps_module.get_last_fix().expect("Expected a valid GPS fix");
         assert!(fix.latitude.is_some());
         assert!(fix.longitude.is_some());
-    }
-
-    #[test_log::test]
-    fn test_line_overflow() {
-        let mut line_iterator = LineByLineIterator::new();
-        let max_buffer = line_iterator.bytes_available();
-        let long_line = "A".repeat(max_buffer + 10) + "\n";
-
-        let mut reader = std::io::Cursor::new(long_line.as_bytes().to_vec());
-        let result = line_iterator.fill_from(&mut reader);
-
-        assert_eq!(result.unwrap(), max_buffer);
-
-        let mut reader = std::io::Cursor::new(b"B".to_vec());
-        let result = line_iterator.fill_from(&mut reader);
-        assert_eq!(result.unwrap(), 1);
-        assert_eq!(line_iterator.bytes_available(), max_buffer - 1); // O buffer foi resetado e agora tem apenas 1 byte
-    }
-
-    #[test_log::test]
-    fn test_incomplete_lines() {
-        let mut line_iterator = LineByLineIterator::new();
-        // Inicialmente uma linha pela metade, depois o restante
-        let input = "LINE1\r\nLIN";
-        let mut reader = std::io::Cursor::new(input.as_bytes().to_vec());
-
-        // Preenche o buffer com a entrada
-        line_iterator.fill_from(&mut reader).expect("Failed to fill buffer");
-
-        let mut lines = Vec::new();
-        line_iterator.drain_lines(|line| lines.push(line.to_string()));
-
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0], "LINE1");
-
-        // Agora preenche o restante da linha incompleta
-        let input2 = "E2\r\n";
-        let mut reader2 = std::io::Cursor::new(input2.as_bytes().to_vec());
-        line_iterator.fill_from(&mut reader2).expect("Failed to fill buffer");
-
-        let mut lines2 = Vec::new();
-        line_iterator.drain_lines(|line| lines2.push(line.to_string()));
-
-        assert_eq!(lines2.len(), 1);
-        assert_eq!(lines2[0], "LINE2");
     }
 }

@@ -18,8 +18,8 @@ MCU = "esp32c6"
 ESP_IDF_VERSION = "v5.5.3"
 ESP_IDF_TOOLS_INSTALL_DIR = "global"
 
-# WIFI_SSID = "?"
-# WIFI_PASS = "?"
+# WIFI_SSID = ""
+# WIFI_PASS = ""
 
 # Uncomment this if you have moved the target dir by setting CARGO_TARGET_DIR or similar.
 # Required for now due to embuild limitations.

@@ -1,5 +1,3 @@
-use esp32_omni_track::Result;
-
 use mipidsi::{
     Builder,
     interface::SpiInterface,
@@ -14,28 +12,31 @@ use embedded_graphics::{
 use crate::gps::GPSPosition;
 
 pub struct DisplayModule<D> {
-    phantom: core::marker::PhantomData<D>,
+    display: D,
 }
 
 impl<D> DisplayModule<D> 
 where 
-    D: DrawTarget<Color = Rgb565>,
-    D::Error: core::fmt::Debug,
+    D: DrawTarget<Color = Rgb565>
 {
-    pub fn new() -> Self {
+    pub fn new(display: D) -> Self {
         Self {
-            phantom: core::marker::PhantomData,
+            display,
         }
     }
 
-    pub fn draw_position(&mut self, display: &mut D, position: Option<&GPSPosition>) -> Result<()> {
-        display.clear(Rgb565::BLACK)
-            .map_err(|e| format!("Erro ao limpar display: {:?}", e))?;
-        
+    pub fn draw_position(&mut self, position: Option<&GPSPosition>, ip_addr: Option<std::net::IpAddr>) -> Result<(), D::Error> {
+        self.display.clear(Rgb565::BLACK)?;
+        let text_style = MonoTextStyle::new(&ascii::FONT_7X13, Rgb565::WHITE);
+
+        Text::new(&format!(
+            "IP: {}", 
+            ip_addr.unwrap_or_else(|| std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED))
+        ), Point::new(2, 13), text_style).draw(&mut self.display)?;
+
         if let Some(pos) = position {
-            let text_style = MonoTextStyle::new(&ascii::FONT_7X13, Rgb565::WHITE);
             let text = format!(
-                "{:?}\n{:.6}\n{:.6}\n{:.1} km/h {:.1}o {:.1} {}",
+                "{:}\n{:.6} {:.6}\n{:.1} km/h {:.1}o {:.1} {}",
                 pos.timestamp.unwrap_or_default(),
                 pos.latitude.unwrap_or(0.0),
                 pos.longitude.unwrap_or(0.0),
@@ -44,14 +45,11 @@ where
                 pos.hdop.unwrap_or(0.0),
                 pos.num_satellites.unwrap_or(0),
             );
-            Text::new(&text, Point::new(5, 20), text_style)
-                .draw(display)
-                .map_err(|e| format!("Erro ao desenhar texto: {:?}", e))?;
+            Text::new(&text, Point::new(2, 28), text_style)
+                .draw(&mut self.display)?;
         } else {
-            let text_style = MonoTextStyle::new(&ascii::FONT_10X20, Rgb565::WHITE);
-            Text::new("Sem fix GPS!", Point::new(5, 20), text_style)
-                .draw(display)
-                .map_err(|e| format!("Erro ao desenhar texto: {:?}", e))?;
+            Text::new("Sem fix GPS!", Point::new(2, 28), text_style)
+                .draw(&mut self.display)?;
         }
 
         Ok(())

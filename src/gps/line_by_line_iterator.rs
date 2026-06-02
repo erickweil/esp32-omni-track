@@ -6,7 +6,7 @@ const MAX_BUFFER: usize = 512;
 
 pub struct LineByLineIterator {
     /// Buffer de leitura
-    buf: Vec<u8>,
+    buf: Box::<[u8]>,
     /// Quantos bytes no 'buf' são válidos
     fill: usize,
 }
@@ -14,7 +14,7 @@ pub struct LineByLineIterator {
 impl LineByLineIterator {
     pub fn new() -> Self {
         Self { 
-            buf: vec![0; MAX_BUFFER],
+            buf: vec![0u8; MAX_BUFFER].into_boxed_slice(),
             fill: 0 
         }
     }
@@ -55,5 +55,42 @@ impl LineByLineIterator {
     #[cfg(test)]
     pub fn bytes_available(&self) -> usize {
         self.buf.len() - self.fill
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_line_by_line_iterator() {
+        // The idea is to test if it can handle incomplete lines, byte by byte and multiple lines at once.
+        let test_input = b"line1\r\nline2\nline3\r\nline\r4\r\npartial";
+
+        // 1. Multiple lines at once
+        let mut iterator = LineByLineIterator::new();
+        let mut output = Vec::new();
+        iterator.fill_from(&mut std::io::Cursor::new(test_input)).unwrap();
+        iterator.drain_lines(|line| output.push(line.to_string()));
+        assert_eq!(output, vec!["line1", "line2", "line3", "line\r4"]);
+
+        // 2. Byte by byte
+        let mut iterator = LineByLineIterator::new();
+        let mut output = Vec::new();
+        for &byte in test_input {
+            iterator.fill_from(&mut std::io::Cursor::new([byte])).unwrap();
+            iterator.drain_lines(|line| output.push(line.to_string()));
+        }
+        assert_eq!(output, vec!["line1", "line2", "line3", "line\r4"]);
+    }
+
+    #[test]
+    fn test_buffer_overflow() {
+        let mut iterator = LineByLineIterator::new();
+        let large_input = vec![b'A'; MAX_BUFFER + 100]; // Excede o buffer
+        let bytes_read = iterator.fill_from(&mut std::io::Cursor::new(large_input)).unwrap();
+        assert_eq!(bytes_read, MAX_BUFFER);
+        assert_eq!(iterator.bytes_available(), 0); // O buffer deve estar cheio
     }
 }

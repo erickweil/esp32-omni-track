@@ -45,8 +45,10 @@ esp-idf-svc = { version = "0.52.1", features = ["critical-section", "embassy-tim
 embassy-time = { version = "0.5", features = ["generic-queue-8"] , optional = true }
 embedded-graphics = "0.8.2"
 mipidsi = "0.10.0"
-nmea = { version = "0.7.0", default-features = false, features = ["std", "GNSS"] }
-chrono = { version = "0.4.44", default-features = false, features = ["std"] }
+nmea = { version = "0.7.0", default-features = false, features = ["GNSS"] }
+chrono = { version = "0.4.44", default-features = false }
+postcard = "1.1.*"
+serde = { version = "1.0.*", default-features = false }
 
 [dev-dependencies]
 test-log = { version = "*" }

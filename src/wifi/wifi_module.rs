@@ -37,15 +37,15 @@ mod wifi_module_impl {
     use std::sync::{Arc, Mutex};
 
     pub struct WifiModule {
-
+        wifi: BlockingWifi<EspWifi<'static>>
     }
 
     impl WifiModule {
-        pub fn new() -> Self {
-            WifiModule {}
+        pub fn new(wifi: BlockingWifi<EspWifi<'static>>) -> Self {
+            WifiModule { wifi }
         }
 
-        pub fn config_wifi(&mut self, wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
+        pub fn config_wifi(&mut self) -> Result<()> {
             let auth_method = if PASSWORD.is_empty() {
                 AuthMethod::None
             } else {
@@ -73,10 +73,10 @@ mod wifi_module_impl {
                 })
             };
 
-            wifi.set_configuration(&wifi_configuration)?;
+            self.wifi.set_configuration(&wifi_configuration)?;
 
             log::info!("Starting Wi-Fi...");
-            wifi.start()?;
+            self.wifi.start()?;
 
             // --- Redução da Potência de Transmissão (Hardware Brownout Fix) ---
             // O problema: o rádio RF liga e puxa um pico de corrente repentino que pode passar de 300mA.
@@ -91,28 +91,48 @@ mod wifi_module_impl {
                 }
             }
 
+            Ok(())
+        }
+
+        pub fn wait_connect_wifi(&mut self) -> Result<()> {
             if WIFI_AP_MODE {
                 log::info!("Created Wi-Fi AP with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
 
-                wifi.wait_netif_up()?;
+                self.wifi.wait_netif_up()?;
                 log::info!("Wifi netif up");
 
-                let ip_info = wifi.wifi().ap_netif().get_ip_info()?;
+                let ip_info = self.wifi.wifi().ap_netif().get_ip_info()?;
                 log::info!("Running on IP {}", ip_info.ip);
             } else {
                 // Só é necessário conectar se for modo cliente
                 log::info!("Connecting Wi-Fi with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
-                wifi.connect()?;
+                self.wifi.connect()?;
                 log::info!("Wifi connected");
 
-                wifi.wait_netif_up()?;
+                self.wifi.wait_netif_up()?;
                 log::info!("Wifi netif up");
 
-                let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
+                let ip_info = self.wifi.wifi().sta_netif().get_ip_info()?;
                 log::info!("Running on IP {}", ip_info.ip);
             }
 
             Ok(())
+        }
+
+        pub fn is_connected(&self) -> bool {
+            if WIFI_AP_MODE {
+                self.wifi.wifi().ap_netif().is_up().unwrap_or(false)
+            } else {
+                self.wifi.wifi().sta_netif().is_up().unwrap_or(false)
+            }
+        }
+
+        pub fn get_ip(&self) -> Option<std::net::IpAddr> {
+            if WIFI_AP_MODE {
+                self.wifi.wifi().ap_netif().get_ip_info().ok().map(|ip_info| ip_info.ip.into())
+            } else {
+                self.wifi.wifi().sta_netif().get_ip_info().ok().map(|ip_info| ip_info.ip.into())
+            }
         }
     }
 }

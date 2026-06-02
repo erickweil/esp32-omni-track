@@ -28,10 +28,8 @@
             }
         }
 
-        // Atualiza a cada 5 segundos
-        setInterval(() => {
-            fetchGPSData();
-        }, 5000);
+        setInterval(() => { fetchGPSData(); }, 5000);
+        fetchGPSData();
     </script>
 </body>
 </html>
