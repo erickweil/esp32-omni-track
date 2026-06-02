@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMNI TRACK</title>
+    <style>
+        body { text-align: center; }
+        button { padding: 10px 20px; color: #fff; background-color: #007BFF; }
+    </style>
+</head>
+<body>
+    <h1>OMNI TRACK</h1>
+    <pre id="gps-real-time"></pre>
+    <script>
+        const gpsElement = document.getElementById('gps-real-time');
+        // Tem que fazer um GET em /position para obter a última posição GPS registrada
+        async function fetchGPSData() {
+            try {
+                const data = await fetch('/position', { method: 'GET' })
+                    .then(res => res.json())
+                    .catch(err => { throw new Error('Erro ao obter dados GPS: ' + err.message); });
+
+                gpsElement.innerText = `Latitude: ${data.latitude}\nLongitude: ${data.longitude}\nSpeed: ${data.speed}\nCourse: ${data.course}\nHDOP: ${data.hdop}\nSatélites: ${data.num_satellites}\nTimestamp: ${data.timestamp}`;
+            } catch (error) {
+                console.error(error);
+                gpsElement.innerText = 'Erro ao obter dados GPS: '+error.message;
+            }
+        }
+
+        // Atualiza a cada 5 segundos
+        setInterval(() => {
+            fetchGPSData();
+        }, 5000);
+    </script>
+</body>
+</html>

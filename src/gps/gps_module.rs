@@ -138,4 +138,32 @@ $GPGGA,045252.000,3014.4273,N,09749.0628,W,1,09,1.3,206.9,M,-22.5,M,,0000*6F\r\n
         assert_eq!(result.unwrap(), 1);
         assert_eq!(line_iterator.bytes_available(), max_buffer - 1); // O buffer foi resetado e agora tem apenas 1 byte
     }
+
+    #[test_log::test]
+    fn test_incomplete_lines() {
+        let mut line_iterator = LineByLineIterator::new();
+        // Inicialmente uma linha pela metade, depois o restante
+        let input = "LINE1\r\nLIN";
+        let mut reader = std::io::Cursor::new(input.as_bytes().to_vec());
+
+        // Preenche o buffer com a entrada
+        line_iterator.fill_from(&mut reader).expect("Failed to fill buffer");
+
+        let mut lines = Vec::new();
+        line_iterator.drain_lines(|line| lines.push(line.to_string()));
+
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "LINE1");
+
+        // Agora preenche o restante da linha incompleta
+        let input2 = "E2\r\n";
+        let mut reader2 = std::io::Cursor::new(input2.as_bytes().to_vec());
+        line_iterator.fill_from(&mut reader2).expect("Failed to fill buffer");
+
+        let mut lines2 = Vec::new();
+        line_iterator.drain_lines(|line| lines2.push(line.to_string()));
+
+        assert_eq!(lines2.len(), 1);
+        assert_eq!(lines2[0], "LINE2");
+    }
 }

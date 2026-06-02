@@ -6,6 +6,6 @@ firmware="target/flasher_args.json"
 # firmware = "target/xtensa-esp32s3-espidf/debug/esp32-omni-track"
 
 # Forward http://localhost:8080 to port 80 on the simulated ESP32:
-# [[net.forward]]
-# from = "localhost:8080"
-# to = "target:80"
+[[net.forward]]
+from = "localhost:8080"
+to = "target:80"

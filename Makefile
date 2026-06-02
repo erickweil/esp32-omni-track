@@ -1,12 +1,12 @@
-# BOARD	   	    ?= heltec_wireless_tracker
+BOARD	   	    ?= heltec_wireless_tracker
 # BOARD	   	    ?= esp32c3_super_mini
-BOARD	   	    ?= esp32c6_devkitc_1
+# BOARD	   	    ?= esp32c6_devkitc_1
 
 # Mapeamento BOARD → MCU
 ifneq ($(filter $(BOARD),heltec_wireless_tracker),)
   MCU             := esp32s3
   FLASH_SIZE      := 8mb
-  PARTITION_TABLE := partitions/large_spiffs_8MB.csv
+  PARTITION_TABLE := partitions/large_spiffs_v2_8MB.csv
 else ifneq ($(filter $(BOARD),esp32c3_super_mini),)
   MCU             := esp32c3
   FLASH_SIZE      := 4mb
@@ -14,7 +14,7 @@ else ifneq ($(filter $(BOARD),esp32c3_super_mini),)
 else ifneq ($(filter $(BOARD),esp32c6_devkitc_1),)
   MCU             := esp32c6
   FLASH_SIZE      := 8mb
-  PARTITION_TABLE := partitions/large_spiffs_8MB.csv
+  PARTITION_TABLE := partitions/large_spiffs_v2_8MB.csv
 else
   $(error "Unknown BOARD: $(BOARD)")
 endif

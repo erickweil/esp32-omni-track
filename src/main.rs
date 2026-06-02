@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use std::{thread, time::Duration};
+use std::{sync::{Arc, Mutex}, thread, time::Duration};
 use mipidsi::{Builder, interface::SpiInterface, models::ST7735s, options::{ColorInversion, ColorOrder, Orientation, Rotation}};
 use nmea::Nmea;
 
@@ -9,6 +9,12 @@ use gps::*;
 
 mod display;
 use display::*;
+
+mod wifi;
+use wifi::*;
+
+// Html das páginas, sem precisar de alocação dinâmica (String)
+static INDEX_HTML: &str = include_str!("index.html");
 
 espidf_only! {
     use std::io::Read;
@@ -22,6 +28,12 @@ espidf_only! {
         uart::{UartConfig, UartDriver}, 
         units::{Hertz, MegaHertz},
     };
+
+    use esp_idf_svc::eventloop::EspSystemEventLoop;
+    use esp_idf_svc::nvs::EspDefaultNvsPartition;
+    use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
+    use esp_idf_svc::http;
+    use esp_idf_svc::io::Write;
 
     /// Wrapper sobre UartDriver para implementar a trait `std::io::Read` de forma não bloqueante, permitindo ler os dados do GPS sem travar o loop principal.
     pub struct NonBlockingUart<'d>(pub UartDriver<'d>);
@@ -44,9 +56,10 @@ espidf_only! {
 
         // Bind the log crate to the ESP Logging facilities
         esp_idf_svc::log::EspLogger::initialize_default();
-        log::info!("Configurando periféricos...");
 
         let peripherals = Peripherals::take()?;
+        let sys_loop = EspSystemEventLoop::take()?;
+        let nvs = EspDefaultNvsPartition::take()?;
 
         // Configuração de Pinos do display para o Heltec Wireless Tracker
         #[cfg(feature = "esp32c6_devkitc_1")]
@@ -83,6 +96,20 @@ espidf_only! {
 
         #[cfg(feature = "heltec_wireless_tracker")]
         let mut vext = PinDriver::output(peripherals.pins.gpio3)?; // Vext Ctrl: HIGH para energizar display e GNSS onboard
+
+        #[cfg(feature = "heltec_wireless_tracker")]
+        {
+            // Habilita Vext para alimentar o display e módulo GNSS onboard
+            // Se não fizer isso antes de tudo, corrompe a memória e dá todo tipo de bug
+            vext.set_high()?;
+            log::info!("Vext habilitado para alimentar o display e módulo GNSS onboard");
+            // Espera um pouco para estabilizar tensão (Display, GPS, Wifi, etc...)
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        // Liga o backlight
+        backlight.set_high()?;
+        thread::sleep(Duration::from_millis(250));
 
         log::info!("GPS UART...");
         // Default read from Serial port (UART0) for ESP32
@@ -126,12 +153,11 @@ espidf_only! {
         )?;
 
         // display interface abstraction from SPI and DC
-        // Buffer na heap para não pressionar a stack da task principal
-        let mut buffer = Box::new([0u8; 512]);
+        let mut buffer = [0u8; 512];
         let di = SpiInterface::new(
             spi_device, 
             dc, 
-            buffer.as_mut()
+            &mut buffer
         );
 
         // crate driver
@@ -146,35 +172,73 @@ espidf_only! {
             .init(&mut delay::Ets)
             .map_err(|e| format!("Erro ao inicializar display: {e:?}"))?;
 
-        log::info!("Ativando...");
+        let mut display_module = DisplayModule::new();
+        let gps_module = GPSModule::new();
 
-        #[cfg(feature = "heltec_wireless_tracker")]
-        {                
-            // Habilita Vext para alimentar o display e módulo GNSS onboard
-            vext.set_high()?;
-            //thread::sleep(Duration::from_millis(500));
-            log::info!("Vext habilitado para alimentar o display e módulo GNSS onboard");
+        log::info!("INICIALIZADO 1!");
+        unsafe {
+            log::info!("Stack mínima livre: {} bytes", sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut()));
+            log::info!("Free heap: {} bytes", sys::esp_get_free_heap_size());
+            log::info!("Largest free block: {} bytes", sys::heap_caps_get_largest_free_block(sys::MALLOC_CAP_8BIT));
         }
 
-        // Liga o backlight
-        backlight.set_high()?;
-        //thread::sleep(Duration::from_millis(50));
+        display_module.draw_position(&mut display, None)?;
 
-        let mut display_module = DisplayModule::new();
-        let mut gps_module = GPSModule::new();
+        // Arc<Mutex<T>> permite compartilhar estado entre múltiplas rotas de forma segura
+        let gps_module = Arc::new(Mutex::new(gps_module));
 
-        log::info!("INICIALIZADO!");
-        // uxTaskGetStackHighWaterMark retorna palavras (4 bytes), então multiplica por 4 para bytes.
-        let high_water_words = unsafe { sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut()) };
-        log::info!("Stack mínima livre: {} bytes ({} words)", high_water_words * 4, high_water_words);
+        // WIFI
+        log::info!("Configurando Wi-Fi...");
+
+        let mut wifi = BlockingWifi::wrap(
+            EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?,
+            sys_loop,
+        )?;
+        let mut wifi_module = WifiModule::new();
+        wifi_module.config_wifi(&mut wifi)?;
+
+        // HTTP server
+        let mut server = http::server::EspHttpServer::new(&http::server::Configuration {
+            stack_size: 10240,
+            ..Default::default()
+        })?;
+        server.fn_handler("/", http::Method::Get, move |req| {
+            req.into_ok_response()?
+                .write_all(INDEX_HTML.as_bytes())
+                .map(|_| ())
+        })?;
+
+        let handler_gps_module = gps_module.clone();
+        server.fn_handler("/position", http::Method::Get, move |req| {
+            let position = handler_gps_module.lock().unwrap().get_last_fix();
+
+            req.into_ok_response()?
+                .write_all(
+                    format!("{{ \"latitude\": \"{:}\", \"longitude\": \"{:}\", \"speed\": \"{:}\", \"course\": \"{:}\", \"hdop\": \"{:}\", \"num_satellites\": \"{:}\", \"timestamp\": \"{:}\" }}",
+                    position.as_ref().and_then(|fix| fix.latitude).unwrap_or_default(),
+                    position.as_ref().and_then(|fix| fix.longitude).unwrap_or_default(),
+                    position.as_ref().and_then(|fix| fix.speed).unwrap_or_default(),
+                    position.as_ref().and_then(|fix| fix.course).unwrap_or_default(),
+                    position.as_ref().and_then(|fix| fix.hdop).unwrap_or_default(),
+                    position.as_ref().and_then(|fix| fix.num_satellites).unwrap_or_default(),
+                    position.as_ref().and_then(|fix| fix.timestamp).unwrap_or_default()
+                    ).as_bytes()
+                )
+        })?;
+
+        log::info!("INICIALIZADO 2!");
+        unsafe {
+            log::info!("Stack mínima livre: {} bytes", sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut()));
+            log::info!("Free heap: {} bytes", sys::esp_get_free_heap_size());
+            log::info!("Largest free block: {} bytes", sys::heap_caps_get_largest_free_block(sys::MALLOC_CAP_8BIT));
+        }
 
         let mut changed_before = false;
         loop {
-
-            let changed = gps_module.read_from_uart(&mut gps_uart)?;
+            let changed = gps_module.lock().unwrap().read_from_uart(&mut gps_uart)?;
 
             if changed_before && !changed {
-                let fix = gps_module.get_last_fix();
+                let fix = gps_module.lock().unwrap().get_last_fix();
                 if let Some(fix) = fix.as_ref() {
                     log::info!("TIMESTAMP: {:?}", fix.timestamp);
                     log::info!("LATITUDE: {:?}", fix.latitude);

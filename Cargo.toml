@@ -9,8 +9,12 @@ name = "esp32-omni-track"
 # harness = false # do not use the built-in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
-codegen-units = 1     # LLVM can perform better optimizations using a single thread
-opt-level = "s"
+# https://github.com/johnthagen/min-sized-rust
+opt-level = "z"      # Optimize for size. This enables all optimizations that do not increase code size.
+strip = true         # Automatically strip symbols from the binary.
+lto = true           # Enable Link Time Optimization (LTO) for better performance and smaller binary size.
+codegen-units = 1    # LLVM can perform better optimizations using a single thread
+panic = "abort"      # Abort on panic to reduce binary size (no unwinding code)
 
 [profile.dev]
 debug = true    # Symbols are nice, and they don't increase the size on Flash
