@@ -1,3 +1,6 @@
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
 use esp32_omni_track::prelude::*;
 
 /// Configurações de Wi-Fi
@@ -22,6 +25,8 @@ const CHANNEL: u8 = 2;
 /// [No esp32c3 precisa disso ou não funciona o wifi]
 const MAX_RADIO_POWER: Option<i8> = None; // Some(34);
 
+const WIFI_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[cfg(feature = "espidf")]
 mod wifi_module_impl {
     use super::*;
@@ -37,15 +42,18 @@ mod wifi_module_impl {
     use esp_idf_svc::hal::{gpio, peripherals::Peripherals};
     use esp_idf_svc::nvs::EspDefaultNvsPartition;
     use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
-    use std::sync::{Arc, Mutex};
 
     pub struct WifiModule {
-        wifi: BlockingWifi<EspWifi<'static>>
+        wifi: BlockingWifi<EspWifi<'static>>,
+        last_connect_try: Option<Instant>,
     }
 
     impl WifiModule {
         pub fn new(wifi: BlockingWifi<EspWifi<'static>>) -> Self {
-            WifiModule { wifi }
+            WifiModule { 
+                wifi,
+                last_connect_try: None,
+            }
         }
 
         pub fn config_wifi(&mut self) -> Result<()> {
@@ -94,40 +102,36 @@ mod wifi_module_impl {
                 }
             }
 
-            Ok(())
-        }
-
-        pub fn wait_connect_wifi(&mut self) -> Result<()> {
             if WIFI_AP_MODE {
                 log::info!("Created Wi-Fi AP with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
-
-                self.wifi.wait_netif_up()?;
-                log::info!("Wifi netif up");
-
-                let ip_info = self.wifi.wifi().ap_netif().get_ip_info()?;
-                log::info!("Running on IP {}", ip_info.ip);
             } else {
-                // Só é necessário conectar se for modo cliente
-                log::info!("Connecting Wi-Fi with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
-                self.wifi.connect()?;
-                log::info!("Wifi connected");
-
-                self.wifi.wait_netif_up()?;
-                log::info!("Wifi netif up");
-
-                let ip_info = self.wifi.wifi().sta_netif().get_ip_info()?;
-                log::info!("Running on IP {}", ip_info.ip);
+                log::info!("Configured Wi-Fi client with WIFI_SSID `{SSID}` and password `{PASSWORD}`");
             }
 
             Ok(())
         }
 
-        pub fn is_connected(&self) -> bool {
-            if WIFI_AP_MODE {
-                self.wifi.wifi().ap_netif().is_up().unwrap_or(false)
-            } else {
-                self.wifi.wifi().sta_netif().is_up().unwrap_or(false)
+        /// Método não-bloqueante para verificar e manter a conexão Wi-Fi (Caso perca conexão tenta reconectar continuamente a cada 30s)
+        pub fn check_connect_wifi(&mut self) -> Result<bool> {
+            let wifi = self.wifi.wifi_mut();
+
+            if !WIFI_AP_MODE {
+                // Só é necessário conectar se for modo cliente
+                // self.wifi.connect()?;
+                let is_connected = wifi.is_connected()?;
+                if !is_connected {
+                    if self.last_connect_try.is_none_or(|time| time.elapsed() > WIFI_CONNECT_TIMEOUT) {
+                        log::info!("(re)conectando ao Wi-Fi...");
+                        wifi.connect()?;
+                        self.last_connect_try = Some(std::time::Instant::now());
+                    }
+                    return Ok(false);
+                }
             }
+
+            // self.wifi.wait_netif_up()?;
+            let is_up = wifi.is_up()?;
+            return Ok(is_up);
         }
 
         pub fn get_ip(&self) -> Option<std::net::IpAddr> {

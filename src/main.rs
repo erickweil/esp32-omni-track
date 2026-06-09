@@ -186,8 +186,7 @@ espidf_only! {
         log::info!("INICIALIZADO 1!");
         test_debug_memory();
 
-        display_module.draw_position(None, None)
-            .map_err(|e| format!("Erro no display: {e:?}"))?;
+        display_module.draw_position(None, None);
 
         // WIFI
         log::info!("Configurando Wi-Fi...");
@@ -210,44 +209,47 @@ espidf_only! {
         test_debug_memory();
 
         let mut changed_before = false;
-        let mut wifi_connect_timeout: Option<std::time::Instant> = None;
         loop {
-            // Verifica conexão wifi
-            if !wifi_module.is_connected() 
-            && wifi_connect_timeout.is_none_or(|timeout| timeout.elapsed() > Duration::from_secs(60)) {
-                log::info!("Tentando conexão Wi-Fi...");
-                if let Err(e) = wifi_module.wait_connect_wifi() {
-                    log::error!("Erro ao conectar Wi-Fi: {e}");
-                    wifi_connect_timeout = Some(std::time::Instant::now());
+            let try_result = (|| -> Result<()> {
+                // Verifica conexão wifi e tenta reconectar se necessário (sem esperar)
+                let wifi_is_up = wifi_module.check_connect_wifi()?;
+
+                // Lê dados do GPS caso disponíveis para leitura imediata
+                let changed = gps_module.read_from_uart()?;
+
+                if changed_before && !changed {
+                    let fix = gps_module.get_last_fix();
+                    {
+                        let mut app_state = http_app_data.lock().unwrap();
+                        app_state.last_gps_fix = fix.clone();
+                    }
+
+                    if let Some(fix) = fix.as_ref() {
+                        log::info!("TIMESTAMP: {:?}", fix.timestamp);
+                        log::info!("LATITUDE: {:?}", fix.latitude);
+                        log::info!("LONGITUDE: {:?}", fix.longitude);
+                        log::info!("SPEED: {:?}", fix.speed);
+                        log::info!("COURSE: {:?}", fix.course);
+                        log::info!("HDOP: {:?}", fix.hdop);
+                        log::info!("NUM SATELLITES: {:?}", fix.num_satellites);
+                    } else {
+                        log::info!("Sem fix GPS válido");
+                    }
+
+                    display_module.draw_position(
+                        fix.as_ref(), 
+                        if wifi_is_up { wifi_module.get_ip() } else { None }
+                    );
                 }
+                changed_before = changed;
+
+                Ok(())
+            })();
+            if let Err(e) = try_result {
+                log::info!("Erro no loop principal: {:?}", e);
+                // Esperar um pouco mais já que deu erro né
+                thread::sleep(Duration::from_millis(100));
             }
-
-            let changed = gps_module.read_from_uart()?;
-
-            if changed_before && !changed {
-                let fix = gps_module.get_last_fix();
-                {
-                    let mut app_state = http_app_data.lock().unwrap();
-                    app_state.last_gps_fix = fix.clone();
-                }
-
-                if let Some(fix) = fix.as_ref() {
-                    log::info!("TIMESTAMP: {:?}", fix.timestamp);
-                    log::info!("LATITUDE: {:?}", fix.latitude);
-                    log::info!("LONGITUDE: {:?}", fix.longitude);
-                    log::info!("SPEED: {:?}", fix.speed);
-                    log::info!("COURSE: {:?}", fix.course);
-                    log::info!("HDOP: {:?}", fix.hdop);
-                    log::info!("NUM SATELLITES: {:?}", fix.num_satellites);
-                } else {
-                    log::info!("Sem fix GPS válido");
-                }
-
-                display_module.draw_position(fix.as_ref(), wifi_module.get_ip())
-                    .map_err(|e| format!("Erro no display: {e:?}"))?;
-            }
-            changed_before = changed;
-
             // Devolve o controle para o FreeRTOS
             thread::sleep(Duration::from_millis(10));
         }

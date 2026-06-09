@@ -53,12 +53,12 @@
     <div class="field"><div class="field-label">HDOP</div><div class="field-value" id="hdp">—</div></div>
     <div class="field"><div class="field-label">Satélites</div><div class="field-value" id="sat">—</div></div>
   </div>
+  <div class="field"><div class="field-label">Data/Hora</div><div class="field-value" id="timestamp">—</div></div>
 
   <button id="maps-btn" disabled onclick="openMaps()">Ver no Google Maps</button>
 
   <div class="footer-info">
     <div id="error-message"></div>
-    <div id="timestamp">—</div>
   </div>
 
   <script>
@@ -93,13 +93,13 @@
         currentLat = data.latitude;
         currentLng = data.longitude;
 
-        updateField('lat', currentLat);
-        updateField('lng', currentLng);
-        updateField('spd', data.speed + ' km/h');
-        updateField('crs', data.course + '°');
-        updateField('hdp', data.hdop);
-        updateField('sat', data.num_satellites);
-        updateField('timestamp', data.timestamp);
+        updateField('lat', Number(currentLat).toFixed(6));
+        updateField('lng', Number(currentLng).toFixed(6));
+        updateField('spd', Number(data.speed).toFixed(2) + ' km/h');
+        updateField('crs', "" + parseInt(data.course) + '°');
+        updateField('hdp', Number(data.hdop).toFixed(1));
+        updateField('sat', "" + parseInt(data.num_satellites));
+        updateField('timestamp', new Date(data.timestamp).toLocaleString());
 
         // Ativa o botão do Maps se tivermos coordenadas válidas
         mapsBtn.disabled = !currentLat || !currentLng;

@@ -36,18 +36,18 @@ mod wifi_module_impl {
                 state.last_gps_fix.clone()
             };
 
-            req.into_ok_response()?
-                .write_all(
-                    format!("{{ \"latitude\": \"{:}\", \"longitude\": \"{:}\", \"speed\": \"{:}\", \"course\": \"{:}\", \"hdop\": \"{:}\", \"num_satellites\": \"{:}\", \"timestamp\": \"{:}\" }}",
-                    position.as_ref().and_then(|fix| fix.latitude).unwrap_or_default(),
-                    position.as_ref().and_then(|fix| fix.longitude).unwrap_or_default(),
-                    position.as_ref().and_then(|fix| fix.speed).unwrap_or_default(),
-                    position.as_ref().and_then(|fix| fix.course).unwrap_or_default(),
-                    position.as_ref().and_then(|fix| fix.hdop).unwrap_or_default(),
-                    position.as_ref().and_then(|fix| fix.num_satellites).unwrap_or_default(),
-                    position.as_ref().and_then(|fix| fix.timestamp).unwrap_or_default()
-                    ).as_bytes()
-                )
+            let mut response = req.into_ok_response()?;
+            write!(response, "{{ \"latitude\": \"{:}\", \"longitude\": \"{:}\", \"speed\": \"{:}\", \"course\": \"{:}\", \"hdop\": \"{:}\", \"num_satellites\": \"{:}\", \"timestamp\": \"{:}Z\" }}",
+                position.as_ref().and_then(|fix| fix.latitude).unwrap_or_default(),
+                position.as_ref().and_then(|fix| fix.longitude).unwrap_or_default(),
+                position.as_ref().and_then(|fix| fix.speed).unwrap_or_default(),
+                position.as_ref().and_then(|fix| fix.course).unwrap_or_default(),
+                position.as_ref().and_then(|fix| fix.hdop).unwrap_or_default(),
+                position.as_ref().and_then(|fix| fix.num_satellites).unwrap_or_default(),
+                position.as_ref().and_then(|fix| fix.timestamp).unwrap_or_default(), // Z para indicar UTC
+            )?;
+
+            Result::Ok(())
         })?;
 
         Ok(server)
