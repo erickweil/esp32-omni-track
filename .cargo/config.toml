@@ -20,7 +20,7 @@ ESP_IDF_TOOLS_INSTALL_DIR = "global"
 
 # WIFI_SSID = ""
 # WIFI_PASS = ""
-# WIFI_AP = ""
+# WIFI_AP = "true"
 
 # Uncomment this if you have moved the target dir by setting CARGO_TARGET_DIR or similar.
 # Required for now due to embuild limitations.

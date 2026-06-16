@@ -17,6 +17,9 @@ use wifi::*;
 mod server_http;
 use server_http::*;
 
+mod positions_queue;
+use positions_queue::*;
+
 espidf_only! {
     use std::io::Read;
     use esp_idf_svc::sys as sys;

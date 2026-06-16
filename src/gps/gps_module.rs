@@ -5,19 +5,6 @@ use esp32_omni_track::Result;
 
 use crate::gps::LineByLineIterator;
 
-/*/// Deve caber em 16 bytes
-#[repr(C)]
-pub struct GPSPosition {
-    pub timestamp: u32, // Unix timestamp, seconds since 1970-01-01 UTC
-    pub lat: i32, // Latitude x 1e7 (ex: 30.1234567° -> 301234567)
-    pub lon: i32, // Longitude x 1e7
-
-    pub speed: u8, // Velocidade em km/h (0-255)
-    pub course: u8, // 0-360 -> 0-255
-    pub hdop: u8, // HDOP x 10 (ex: 0.9 -> 9, 1.2 -> 12)
-    pub num_satellites: u8, // Número de satélites usados no fix
-}*/ 
-
 #[derive(Clone)]
 pub struct GPSPosition {
     pub timestamp: Option<NaiveDateTime>,

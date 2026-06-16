@@ -47,8 +47,8 @@ embedded-graphics = "0.8.2"
 mipidsi = "0.10.0"
 nmea = { version = "0.7.0", default-features = false, features = ["GNSS"] }
 chrono = { version = "0.4.44", default-features = false }
-postcard = "1.1.*"
 serde = { version = "1.0.*", default-features = false }
+bytemuck = { version = "1.25.0", features = ["derive"] }
 
 [dev-dependencies]
 test-log = { version = "*" }

@@ -8,7 +8,7 @@ For now the only boards that will be supported are:
 
 ## Roadmap
 - [x] Coletar informações de posição do módulo GPS via UART + exibição display ST7735
-- [ ] Modo stand alone, Wifi AP + Servidor web local
+- [x] Modo stand alone, Wifi AP + Servidor web local
 - [ ] Sistema de arquivos LittleFS para armazenar posições em fila
 - [ ] Registro de posições por tempo e ângulo
 - [ ] Modo mqtt wifi, comunicação com Wifi + MQTT para envio de posições
